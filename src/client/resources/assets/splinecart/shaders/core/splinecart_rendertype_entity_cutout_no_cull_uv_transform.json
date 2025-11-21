@@ -1,6 +1,6 @@
 {
-  "vertex": "splinecart_rendertype_entity_cutout_no_cull_uv_transform",
-  "fragment": "rendertype_entity_cutout_no_cull",
+  "vertex": "splinecart:splinecart_rendertype_entity_cutout_no_cull_uv_transform",
+  "fragment": "minecraft:rendertype_entity_cutout_no_cull",
   "defines": {
     "values": {
       "ALPHA_CUTOUT": "0.1"

@@ -1,17 +1,17 @@
 package io.github.foundationgames.splinecart.block.entity;
 
 import com.mojang.blaze3d.systems.RenderSystem;
+import com.mojang.blaze3d.vertex.PoseStack;
+import com.mojang.blaze3d.vertex.Tesselator;
+import com.mojang.blaze3d.vertex.VertexBuffer;
 import io.github.foundationgames.splinecart.SplinecartClient;
 import io.github.foundationgames.splinecart.block.TrackGeometry;
 import io.github.foundationgames.splinecart.block.TrackTiesBlockEntity;
-import net.minecraft.client.gl.ShaderProgram;
-import net.minecraft.client.gl.VertexBuffer;
-import net.minecraft.client.render.GameRenderer;
-import net.minecraft.client.render.RenderLayer;
-import net.minecraft.client.render.Tessellator;
-import net.minecraft.client.util.math.MatrixStack;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.math.ChunkSectionPos;
+import net.minecraft.client.renderer.GameRenderer;
+import net.minecraft.client.renderer.RenderType;
+import net.minecraft.client.renderer.ShaderInstance;
+import net.minecraft.core.SectionPos;
+import net.minecraft.resources.ResourceLocation;
 import org.joml.Matrix4f;
 import org.joml.Vector3fc;
 
@@ -30,10 +30,10 @@ public class ClientTrackGeometry extends TrackGeometry {
         this.needsRebuild = true;
     }
 
-    public boolean render(MatrixStack matrices,
+    public boolean render(PoseStack matrices,
                           int light, int overlay, int segs, float olVOffset, Vector3fc olColor,
                           int powerState, int trackResolution,
-                          Identifier trackTexture, Identifier overlayTexture,
+                          ResourceLocation trackTexture, ResourceLocation overlayTexture,
                           TrackTiesBlockEntity curr, TrackTiesBlockEntity prevE, TrackTiesBlockEntity nextE) {
         if (!SplinecartClient.CFG_VBOS.get()) {
             this.needsRebuild = true;
@@ -63,14 +63,14 @@ public class ClientTrackGeometry extends TrackGeometry {
             }
 
             trackVbo = new VertexBuffer(VertexBuffer.Usage.STATIC);
-            trackBuffer = TrackRenderer.vboBuf(trackVbo, Tessellator.getInstance());
+            trackBuffer = TrackRenderer.vboBuf(trackVbo, Tesselator.getInstance());
 
             overlayVbo = new VertexBuffer(VertexBuffer.Usage.STATIC);
-            overlayBuffer = TrackRenderer.vboBuf(overlayVbo, Tessellator.getInstance());
+            overlayBuffer = TrackRenderer.vboBuf(overlayVbo, Tesselator.getInstance());
 
             this.resetBounds();
-            var currSec = ChunkSectionPos.from(curr.getPos());
-            var nextSec = nextE != null ? ChunkSectionPos.from(nextE.getPos()) : currSec;
+            var currSec = SectionPos.of(curr.getBlockPos());
+            var nextSec = nextE != null ? SectionPos.of(nextE.getBlockPos()) : currSec;
 
             this.minSectionX = Math.min(currSec.getX(), nextSec.getX());
             this.minSectionY = Math.min(currSec.getY(), nextSec.getY());
@@ -82,17 +82,17 @@ public class ClientTrackGeometry extends TrackGeometry {
             this.needsRebuild = false;
         }
 
-        var trackTransform = new MatrixStack();
+        var trackTransform = new PoseStack();
 
-        matrices.push();
-        trackTransform.push();
-        int status = TrackRenderer.renderTrack(trackTransform.peek(), trackTransform.peek(),
+        matrices.pushPose();
+        trackTransform.pushPose();
+        int status = TrackRenderer.renderTrack(trackTransform.last(), trackTransform.last(),
                 trackBuffer, overlayBuffer,
                 overlay, light, segs,
                 0, olColor,
                 curr, prevE, nextE);
-        matrices.pop();
-        trackTransform.pop();
+        matrices.popPose();
+        trackTransform.popPose();
 
         boolean hasTrackGeo = (status & 0b01) > 0;
         boolean hasOverlayGeo = (status & 0b10) > 0;
@@ -104,17 +104,17 @@ public class ClientTrackGeometry extends TrackGeometry {
             this.overlayVbo = hasOverlayGeo ? overlayVbo : null;
         }
 
-        matrices.push();
+        matrices.pushPose();
 
         var posMatrix = new Matrix4f().set(RenderSystem.getModelViewMatrix());
-        posMatrix.mul(matrices.peek().getPositionMatrix());
+        posMatrix.mul(matrices.last().pose());
 
         var fog = RenderSystem.getShaderFogEnd();
         RenderSystem.setShaderFogEnd(999999999);
 
         if (this.trackVbo != null) {
-            drawVbo(this.trackVbo, posMatrix, () -> RenderLayer.getEntityCutoutNoCullZOffset(trackTexture),
-                    GameRenderer::getRenderTypeEntityCutoutNoNullZOffsetProgram);
+            drawVbo(this.trackVbo, posMatrix, () -> RenderType.entityCutoutNoCullZOffset(trackTexture),
+                    GameRenderer::getRendertypeEntityCutoutNoCullZOffsetShader);
         }
 
         if (this.overlayVbo != null) {
@@ -124,7 +124,7 @@ public class ClientTrackGeometry extends TrackGeometry {
 
         RenderSystem.setShaderFogEnd(fog);
 
-        matrices.pop();
+        matrices.popPose();
 
         this.lastKnownPowerState = powerState;
         this.lastKnownTrackResolution = trackResolution;
@@ -132,17 +132,17 @@ public class ClientTrackGeometry extends TrackGeometry {
         return true;
     }
 
-    public static void drawVbo(VertexBuffer vbo, Matrix4f transform, Supplier<RenderLayer> renderLayer, Supplier<ShaderProgram> shader) {
+    public static void drawVbo(VertexBuffer vbo, Matrix4f transform, Supplier<RenderType> renderLayer, Supplier<ShaderInstance> shader) {
         var layer = renderLayer.get();
-        layer.startDrawing();
+        layer.setupRenderState();
 
         var program = shader.get();
 
         vbo.bind();
-        vbo.draw(transform, RenderSystem.getProjectionMatrix(), program);
+        vbo.drawWithShader(transform, RenderSystem.getProjectionMatrix(), program);
         VertexBuffer.unbind();
 
-        layer.endDrawing();
+        layer.clearRenderState();
     }
 
     @Override

@@ -1,13 +1,13 @@
 package io.github.foundationgames.splinecart.util;
 
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.registry.Registry;
-import net.minecraft.registry.RegistryKey;
-import net.minecraft.util.Identifier;
-import net.minecraft.util.Util;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.MathHelper;
-import net.minecraft.util.math.RotationAxis;
+import com.mojang.math.Axis;
+import net.minecraft.Util;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.Registry;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.resources.ResourceKey;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.util.Mth;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Quaternionf;
 import org.joml.Vector3dc;
@@ -22,30 +22,30 @@ public enum SUtil {;
             float strength = (float)i / 15.0F;
             colors[i] = new Vector3f(
                     strength * 0.6f + (strength > 0.0f ? 0.4f : 0.3f),
-                    MathHelper.clamp((strength * strength * 0.7f) - 0.5f, 0, 1),
-                    MathHelper.clamp((strength * strength * 0.6f) - 0.7f, 0, 1)
+                    Mth.clamp((strength * strength * 0.7f) - 0.5f, 0, 1),
+                    Mth.clamp((strength * strength * 0.6f) - 0.7f, 0, 1)
             );
         }
     });
 
-    public static final Quaternionf BACKWARDS = RotationAxis.POSITIVE_Y.rotation(MathHelper.PI);
+    public static final Quaternionf BACKWARDS = Axis.YP.rotation(Mth.PI);
     public static DoubleSupplier TICK_DELTA = () -> 0;
 
-    public static void putBlockPos(NbtCompound nbt, @Nullable BlockPos pos, String key) {
+    public static void putBlockPos(CompoundTag nbt, @Nullable BlockPos pos, String key) {
         if (pos == null) {
             nbt.putIntArray(key, new int[0]);
         } else nbt.putIntArray(key, new int[] {pos.getX(), pos.getY(), pos.getZ()});
     }
 
-    public static BlockPos getBlockPos(NbtCompound nbt, String key) {
+    public static BlockPos getBlockPos(CompoundTag nbt, String key) {
         var arr = nbt.getIntArray(key);
         if (arr.length < 3) return null;
 
         return new BlockPos(arr[0], arr[1], arr[2]);
     }
 
-    public static <V, T extends V> T register(Registry<V> registry, Identifier id, BiFunction<Identifier, RegistryKey<V>, T> obj) {
-        RegistryKey<V> key = RegistryKey.of(registry.getKey(), id);
+    public static <V, T extends V> T register(Registry<V> registry, ResourceLocation id, BiFunction<ResourceLocation, ResourceKey<V>, T> obj) {
+        ResourceKey<V> key = ResourceKey.create(registry.key(), id);
         return Registry.register(registry, id, obj.apply(id, key));
     }
 

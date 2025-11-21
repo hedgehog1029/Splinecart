@@ -5,18 +5,18 @@ import io.github.foundationgames.splinecart.TrackType;
 import io.github.foundationgames.splinecart.item.TrackItem;
 import io.github.foundationgames.splinecart.util.Pose;
 import io.github.foundationgames.splinecart.util.SUtil;
-import net.minecraft.block.BlockState;
-import net.minecraft.block.entity.BlockEntity;
-import net.minecraft.entity.ItemEntity;
-import net.minecraft.item.ItemStack;
-import net.minecraft.nbt.NbtCompound;
-import net.minecraft.network.listener.ClientPlayPacketListener;
-import net.minecraft.network.packet.Packet;
-import net.minecraft.network.packet.s2c.play.BlockEntityUpdateS2CPacket;
-import net.minecraft.registry.RegistryWrapper;
-import net.minecraft.util.math.BlockPos;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.World;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.HolderLookup;
+import net.minecraft.nbt.CompoundTag;
+import net.minecraft.network.protocol.Packet;
+import net.minecraft.network.protocol.game.ClientGamePacketListener;
+import net.minecraft.network.protocol.game.ClientboundBlockEntityDataPacket;
+import net.minecraft.world.entity.item.ItemEntity;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.level.Level;
+import net.minecraft.world.level.block.entity.BlockEntity;
+import net.minecraft.world.level.block.state.BlockState;
+import net.minecraft.world.phys.Vec3;
 import org.jetbrains.annotations.Nullable;
 import org.joml.Matrix3d;
 import org.joml.Vector3d;
@@ -35,7 +35,7 @@ public class TrackTiesBlockEntity extends BlockEntity {
     private int power = -1;
 
     public TrackTiesBlockEntity(BlockPos pos, BlockState state) {
-        super(Splinecart.TRACK_TIES_BE, pos, state);
+        super(Splinecart.TRACK_TIES_BE.get(), pos, state);
         updatePose(pos, state);
 
         this.geometry = TrackGeometry.CONSTRUCTOR.apply(this);
@@ -50,13 +50,13 @@ public class TrackTiesBlockEntity extends BlockEntity {
     }
 
     @Override
-    public void setCachedState(BlockState state) {
-        super.setCachedState(state);
+    public void setBlockState(BlockState state) {
+        super.setBlockState(state);
 
-        updatePose(this.getPos(), this.getCachedState());
+        updatePose(this.getBlockPos(), this.getBlockState());
     }
 
-    public static @Nullable TrackTiesBlockEntity of(World world, @Nullable BlockPos pos) {
+    public static @Nullable TrackTiesBlockEntity of(Level world, @Nullable BlockPos pos) {
         if (pos != null && world.getBlockEntity(pos) instanceof TrackTiesBlockEntity e) {
             return e;
         }
@@ -65,11 +65,11 @@ public class TrackTiesBlockEntity extends BlockEntity {
     }
 
     private void dropTrack(TrackType type) {
-        var world = getWorld();
-        var pos = Vec3d.ofCenter(getPos());
-        var item = new ItemEntity(world, pos.getX(), pos.getY(), pos.getZ(), new ItemStack(TrackItem.ITEMS_BY_TYPE.get(type)));
+        var world = getLevel();
+        var pos = Vec3.atCenterOf(getBlockPos());
+        var item = new ItemEntity(world, pos.x(), pos.y(), pos.z(), new ItemStack(TrackItem.ITEMS_BY_TYPE.get(type)));
 
-        world.spawnEntity(item);
+        world.addFreshEntity(item);
     }
 
     public void setNext(@Nullable BlockPos pos, @Nullable TrackType type) {
@@ -87,7 +87,7 @@ public class TrackTiesBlockEntity extends BlockEntity {
             }
             var nextE = next();
             if (nextE != null) {
-                nextE.prev = getPos();
+                nextE.prev = getBlockPos();
                 if (type != null) {
                     nextE.prevType = type;
                 }
@@ -99,11 +99,11 @@ public class TrackTiesBlockEntity extends BlockEntity {
     }
 
     public @Nullable TrackTiesBlockEntity next() {
-        return of(this.getWorld(), this.next);
+        return of(this.getLevel(), this.next);
     }
 
     public @Nullable TrackTiesBlockEntity prev() {
-        return of(this.getWorld(), this.prev);
+        return of(this.getLevel(), this.prev);
     }
 
     public @Nullable BlockPos nextPos() {
@@ -128,7 +128,7 @@ public class TrackTiesBlockEntity extends BlockEntity {
 
     public void updatePower() {
         int oldPower = this.power;
-        this.power = getWorld().getReceivedRedstonePower(getPos());
+        this.power = getLevel().getBestNeighborSignal(getBlockPos());
 
         if (oldPower != this.power) {
             setUpdated();
@@ -174,28 +174,28 @@ public class TrackTiesBlockEntity extends BlockEntity {
             return 0;
         }
 
-        return Math.sqrt(nextE.getPos().getSquaredDistance(this.getPos()));
+        return Math.sqrt(nextE.getBlockPos().distSqr(this.getBlockPos()));
     }
 
     @Override
-    public void markRemoved() {
-        super.markRemoved();
+    public void setRemoved() {
+        super.setRemoved();
 
         this.geometry.close();
     }
 
     public void setUpdated() {
         sync();
-        markDirty();
+        setChanged();
 
-        if (getWorld().isClient()) {
+        if (getLevel().isClientSide()) {
             this.geometry.needsRebuild = true;
         }
     }
 
     @Override
-    protected void readNbt(NbtCompound nbt, RegistryWrapper.WrapperLookup registryLookup) {
-        super.readNbt(nbt, registryLookup);
+    protected void loadAdditional(CompoundTag nbt, HolderLookup.Provider registryLookup) {
+        super.loadAdditional(nbt, registryLookup);
 
         this.prev = SUtil.getBlockPos(nbt, "prev");
         this.next = SUtil.getBlockPos(nbt, "next");
@@ -209,8 +209,8 @@ public class TrackTiesBlockEntity extends BlockEntity {
     }
 
     @Override
-    protected void writeNbt(NbtCompound nbt, RegistryWrapper.WrapperLookup registryLookup) {
-        super.writeNbt(nbt, registryLookup);
+    protected void saveAdditional(CompoundTag nbt, HolderLookup.Provider registryLookup) {
+        super.saveAdditional(nbt, registryLookup);
 
         SUtil.putBlockPos(nbt, this.prev, "prev");
         SUtil.putBlockPos(nbt, this.next, "next");
@@ -223,18 +223,18 @@ public class TrackTiesBlockEntity extends BlockEntity {
 
     @Nullable
     @Override
-    public Packet<ClientPlayPacketListener> toUpdatePacket() {
-        return BlockEntityUpdateS2CPacket.create(this);
+    public Packet<ClientGamePacketListener> getUpdatePacket() {
+        return ClientboundBlockEntityDataPacket.create(this);
     }
 
     @Override
-    public NbtCompound toInitialChunkDataNbt(RegistryWrapper.WrapperLookup registryLookup) {
-        var nbt = super.toInitialChunkDataNbt(registryLookup);
-        writeNbt(nbt, registryLookup);
+    public CompoundTag getUpdateTag(HolderLookup.Provider registryLookup) {
+        var nbt = super.getUpdateTag(registryLookup);
+        saveAdditional(nbt, registryLookup);
         return nbt;
     }
 
     public void sync() {
-        getWorld().updateListeners(getPos(), getCachedState(), getCachedState(), 3);
+        getLevel().sendBlockUpdated(getBlockPos(), getBlockState(), getBlockState(), 3);
     }
 }

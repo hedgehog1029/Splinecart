@@ -1,14 +1,14 @@
 package io.github.foundationgames.splinecart.mixin.client;
 
+import com.mojang.math.Axis;
 import io.github.foundationgames.splinecart.SplinecartClient;
 import io.github.foundationgames.splinecart.entity.TrackFollowerEntity;
 import io.github.foundationgames.splinecart.util.SUtil;
-import net.minecraft.client.MinecraftClient;
-import net.minecraft.client.render.Camera;
-import net.minecraft.entity.Entity;
-import net.minecraft.util.math.RotationAxis;
-import net.minecraft.util.math.Vec3d;
-import net.minecraft.world.BlockView;
+import net.minecraft.client.Camera;
+import net.minecraft.client.Minecraft;
+import net.minecraft.world.entity.Entity;
+import net.minecraft.world.level.BlockGetter;
+import net.minecraft.world.phys.Vec3;
 import org.joml.Quaternionf;
 import org.joml.Vector3d;
 import org.spongepowered.asm.mixin.Final;
@@ -20,21 +20,23 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 @Mixin(Camera.class)
 public abstract class CameraMixin {
-    @Shadow protected abstract void setPos(Vec3d pos);
+    @Shadow
+    protected abstract void setPosition(Vec3 pos);
     @Shadow @Final private Quaternionf rotation;
-    @Shadow private Entity focusedEntity;
+    @Shadow
+    private Entity entity;
 
-    @Inject(method = "update(Lnet/minecraft/world/BlockView;Lnet/minecraft/entity/Entity;ZZF)V",
-            at = @At(value = "INVOKE", shift = At.Shift.AFTER, ordinal = 0, target = "Lnet/minecraft/client/render/Camera;setPos(DDD)V"))
-    private void splinecart$updateCamPosWhileRiding(BlockView area, Entity self, boolean thirdPerson, boolean inverseView, float tickDelta, CallbackInfo info) {
+    @Inject(method = "setup",
+            at = @At(value = "INVOKE", shift = At.Shift.AFTER, ordinal = 0, target = "Lnet/minecraft/client/Camera;setPosition(DDD)V"))
+    private void splinecart$updateCamPosWhileRiding(BlockGetter area, Entity self, boolean thirdPerson, boolean inverseView, float tickDelta, CallbackInfo info) {
         var vehicle = self.getVehicle();
         if (vehicle != null) {
             var tf = vehicle.getVehicle();
             if (tf instanceof TrackFollowerEntity trackFollower) {
-                var world = self.getWorld();
-                var diff = self.getPos().add(0, self.getStandingEyeHeight(), 0).subtract(trackFollower.getPos());
-                var camPos = new Vector3d(diff.getX(), diff.getY(), diff.getZ());
-                if (world.isClient()) {
+                var world = self.level();
+                var diff = self.position().add(0, self.getEyeHeight(), 0).subtract(trackFollower.getEyePosition());
+                var camPos = new Vector3d(diff.x(), diff.y(), diff.z());
+                if (world.isClientSide()) {
                     var rot = new Quaternionf();
                     trackFollower.getClientOrientation(rot, tickDelta);
                     rot.transform(camPos);
@@ -43,23 +45,23 @@ public abstract class CameraMixin {
                         return;
                     }
 
-                    this.setPos(new Vec3d(camPos.x(), camPos.y(), camPos.z()).add(trackFollower.getLerpedPos(tickDelta)));
+                    this.setPosition(new Vec3(camPos.x(), camPos.y(), camPos.z()).add(trackFollower.getPosition(tickDelta)));
                 }
             }
         }
     }
 
-    @Inject(method = "setRotation(FF)V",
+    @Inject(method = "setRotation(FFF)V",
             at = @At(value = "INVOKE", shift = At.Shift.AFTER, ordinal = 0, target = "Lorg/joml/Quaternionf;rotationYXZ(FFF)Lorg/joml/Quaternionf;", remap = false))
-    private void splinecart$updateCamRotationWhileRiding(float yaw, float pitch, CallbackInfo info) {
-        var self = this.focusedEntity;
+    private void splinecart$updateCamRotationWhileRiding(float yaw, float pitch, float roll, CallbackInfo info) {
+        var self = this.entity;
         var vehicle = self.getVehicle();
-        var tickDelta = MinecraftClient.getInstance().getRenderTickCounter().getTickDelta(false);
+        var tickDelta = Minecraft.getInstance().getTimer().getGameTimeDeltaPartialTick(false);
         if (vehicle != null) {
             var tf = vehicle.getVehicle();
             if (tf instanceof TrackFollowerEntity trackFollower) {
-                var world = self.getWorld();
-                if (world.isClient()) {
+                var world = self.level();
+                if (world.isClientSide()) {
                     var rot = new Quaternionf();
                     trackFollower.getClientOrientation(rot, tickDelta);
 
@@ -68,7 +70,8 @@ public abstract class CameraMixin {
                     }
 
                     if (SplinecartClient.CFG_ROTATE_CAMERA.get()) {
-                        rot.mul(RotationAxis.POSITIVE_Y.rotationDegrees(90 + vehicle.getYaw(tickDelta)).mul(rotation, rotation), rotation);
+                        rot.mul(Axis.YP.rotationDegrees(180 + vehicle.getViewYRot(tickDelta)).mul(rotation, rotation), rotation);
+//                        rot.mul(Axis.YP.rotationDegrees(90 + vehicle.getViewYRot(tickDelta)).mul(rotation, rotation), rotation);
                     }
                 }
             }

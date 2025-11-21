@@ -1,5 +1,6 @@
 {
 	"ambientocclusion": false,
+	"render_type": "cutout",
 	"textures": {
 		"particle": "splinecart:block/track_ties",
 		"rail": "splinecart:block/track_ties"
