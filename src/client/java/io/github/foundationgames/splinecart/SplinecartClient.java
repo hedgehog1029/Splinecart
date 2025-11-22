@@ -49,6 +49,7 @@ public class SplinecartClient {
         }
 
         NeoForge.EVENT_BUS.addListener(this::registerCommands);
+        NeoForge.EVENT_BUS.addListener(this::onRenderPost);
 
         TrackGeometry.CONSTRUCTOR = ClientTrackGeometry::new;
     }

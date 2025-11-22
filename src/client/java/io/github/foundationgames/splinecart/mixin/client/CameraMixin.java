@@ -29,6 +29,7 @@ public abstract class CameraMixin {
     @Inject(method = "setup",
             at = @At(value = "INVOKE", shift = At.Shift.AFTER, ordinal = 0, target = "Lnet/minecraft/client/Camera;setPosition(DDD)V"))
     private void splinecart$updateCamPosWhileRiding(BlockGetter area, Entity self, boolean thirdPerson, boolean inverseView, float tickDelta, CallbackInfo info) {
+        if (self == null) return;
         var vehicle = self.getVehicle();
         if (vehicle != null) {
             var tf = vehicle.getVehicle();
@@ -55,11 +56,12 @@ public abstract class CameraMixin {
             at = @At(value = "INVOKE", shift = At.Shift.AFTER, ordinal = 0, target = "Lorg/joml/Quaternionf;rotationYXZ(FFF)Lorg/joml/Quaternionf;", remap = false))
     private void splinecart$updateCamRotationWhileRiding(float yaw, float pitch, float roll, CallbackInfo info) {
         var self = this.entity;
+        if (self == null) return;
         var vehicle = self.getVehicle();
-        var tickDelta = Minecraft.getInstance().getTimer().getGameTimeDeltaPartialTick(false);
         if (vehicle != null) {
             var tf = vehicle.getVehicle();
             if (tf instanceof TrackFollowerEntity trackFollower) {
+                var tickDelta = Minecraft.getInstance().getTimer().getGameTimeDeltaPartialTick(false);
                 var world = self.level();
                 if (world.isClientSide()) {
                     var rot = new Quaternionf();
@@ -70,8 +72,8 @@ public abstract class CameraMixin {
                     }
 
                     if (SplinecartClient.CFG_ROTATE_CAMERA.get()) {
-                        rot.mul(Axis.YP.rotationDegrees(180 + vehicle.getViewYRot(tickDelta)).mul(rotation, rotation), rotation);
-//                        rot.mul(Axis.YP.rotationDegrees(90 + vehicle.getViewYRot(tickDelta)).mul(rotation, rotation), rotation);
+//                        rot.mul(Axis.YP.rotationDegrees(180 + vehicle.getViewYRot(tickDelta)).mul(rotation, rotation), rotation);
+                        rot.mul(Axis.YP.rotationDegrees(90 + vehicle.getViewYRot(tickDelta)).mul(rotation, rotation), rotation);
                     }
                 }
             }
